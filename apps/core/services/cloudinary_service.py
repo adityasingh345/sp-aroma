@@ -1,6 +1,5 @@
 import cloudinary
 import cloudinary.uploader
-from fastapi import UploadFile
 
 from config.settings import (
     CLOUDINARY_CLOUD_NAME,
@@ -15,24 +14,18 @@ cloudinary.config(
     secure=True,
 )
 
-class CloudinaryService:
 
+class CloudinaryService:
     @staticmethod
-    async def upload_image(
-        file: UploadFile,
-        folder: str,
-        public_id: str | None = None,
-    ):
+    def upload_image(file, folder: str):
         result = cloudinary.uploader.upload(
             file.file,
             folder=folder,
-            public_id=public_id,
             resource_type="image",
         )
-
         return {
-            "url": result["secure_url"],
             "public_id": result["public_id"],
+            "url": result["secure_url"],
             "format": result["format"],
         }
 
