@@ -1,6 +1,8 @@
 import cloudinary
 import cloudinary.uploader
+import cloudinary.api
 
+from fastapi import UploadFile
 from config.settings import (
     CLOUDINARY_CLOUD_NAME,
     CLOUDINARY_API_KEY,
@@ -16,19 +18,35 @@ cloudinary.config(
 
 
 class CloudinaryService:
+    """
+    Wrapper around Cloudinary SDK
+    """
+
     @staticmethod
-    def upload_image(file, folder: str):
+    def upload_image(file: UploadFile, folder: str) -> dict:
+        """
+        Upload image to Cloudinary
+        """
+
         result = cloudinary.uploader.upload(
             file.file,
             folder=folder,
             resource_type="image",
         )
+
         return {
+            "url": result["url"],
+            "secure_url": result["secure_url"],
             "public_id": result["public_id"],
-            "url": result["secure_url"],
             "format": result["format"],
         }
 
     @staticmethod
-    def delete_image(public_id: str):
-        cloudinary.uploader.destroy(public_id)
+    def delete_image(public_id: str) -> bool:
+        """
+        Delete image from Cloudinary
+        """
+
+        result = cloudinary.uploader.destroy(public_id)
+
+        return result.get("result") == "ok"

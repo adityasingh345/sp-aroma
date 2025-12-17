@@ -264,122 +264,107 @@ class ProductService:
             products_list.append(cls.retrieve_product(product.id))
 
         return products_list
-        # --- list by join ----
-        # products_list = []
-        # with SessionLocal() as session:
-        #     products = select(
-        #         Product.id,
-        #         Product.product_name,
-        #         coalesce(ProductMedia.alt, None).label('alt'),
-        #         coalesce(ProductMedia.src, None).label('src'),
-        #         # media.alt,
-        #         ProductVariant.price,
-        #         ProductVariant.stock
-        #     ).outerjoin(ProductMedia).outerjoin(ProductVariant)
-        #     products   = session.execute(products)
-        #
-        # for product in products:
-        #     media = {'src': product.src, 'alt': product.alt} if product.src is not None else None
-        #     products_list.append(
-        #         {
-        #             'product_id': product.id,
-        #             'product_name': product.product_name,
-        #             'price': product.price,
-        #             'stock': product.stock,
-        #             'media': media
-        #         }
-        #     )
+
+    @staticmethod
+    def delete_product(product_id: int):
+        product = Product.get_or_404(product_id)
+
+        # delete all cloudinary images first
+        media_list = ProductMedia.filter(ProductMedia.product_id == product_id).all()
+        for media in media_list:
+            if media.cloudinary_id:
+                CloudinaryService.delete_image(media.cloudinary_id)
+
+        # pass PRIMARY KEY, not object
+        Product.delete(product.id)
+
+
+
+    # -----------------------------
+    # --- PRODUCT MEDIA METHODS ---
+    # -----------------------------
 
     @classmethod
-    def create_media(cls, product_id, alt, files):
+    def create_media(cls, product_id: int, alt: str | None, files):
         product: Product = Product.get_or_404(product_id)
 
         for file in files:
             upload = CloudinaryService.upload_image(
                 file=file,
-                folder=f"products/{product_id}",
+                folder=f"products/{product_id}"
             )
 
             ProductMedia.create(
                 product_id=product_id,
                 alt=alt or product.product_name,
-                src=upload["url"],              # FULL CLOUDINARY URL
+                src=upload["secure_url"],       # FULL CLOUDINARY URL
                 type=upload["format"],
-                cloudinary_id=upload["public_id"],  # ADD THIS COLUMN
+                cloudinary_id=upload["public_id"],
             )
 
         return cls.retrieve_media_list(product_id)
 
-
     @classmethod
-    def retrieve_media_list(cls, product_id):
-        """
-        Get all media of a product.
-        """
-
+    def retrieve_media_list(cls, product_id: int):
         media_list = []
-        product_media: list[ProductMedia] = ProductMedia.filter(ProductMedia.product_id == product_id).all()
-        for media in product_media:
-            media_list.append(
-                {
-                    "media_id": media.id,
-                    "product_id": media.product_id,
-                    "alt": media.alt,
-                    "src": cls.__get_media_url(media.product_id, media.src),
-                    "type": media.type,
-                    "created_at": DateTime.string(media.created_at),
-                    "updated_at": DateTime.string(media.updated_at)
-                })
-        if media_list:
-            return media_list
-        else:
-            return None
+        media_rows = ProductMedia.filter(ProductMedia.product_id == product_id).all()
+
+        for media in media_rows:
+            media_list.append({
+                "media_id": media.id,
+                "product_id": media.product_id,
+                "alt": media.alt,
+                "src": media.src,               # already cloudinary URL
+                "type": media.type,
+                "created_at": DateTime.string(media.created_at),
+                "updated_at": DateTime.string(media.updated_at),
+            })
+
+        return media_list or None
 
     @classmethod
-    def retrieve_single_media(cls, media_id):
-        """
-        Get a media by id.
-        """
+    def retrieve_single_media(cls, media_id: int):
+        media = ProductMedia.get_or_404(media_id)
 
-        media_obj = ProductMedia.filter(ProductMedia.id == media_id).first()
-        if media_obj:
-            media = {
-                "media_id": media_obj.id,
-                "product_id": media_obj.product_id,
-                "alt": media_obj.alt,
-                "src": cls.__get_media_url(media_obj.product_id, media_obj.src),
-                "type": media_obj.type,
-                "created_at": DateTime.string(media_obj.created_at),
-                "updated_at": DateTime.string(media_obj.updated_at)
-            }
-            return media
-        else:
-            return None
+        return {
+            "media_id": media.id,
+            "product_id": media.product_id,
+            "alt": media.alt,
+            "src": media.src,
+            "type": media.type,
+            "created_at": DateTime.string(media.created_at),
+            "updated_at": DateTime.string(media.updated_at),
+        }
 
     @classmethod
-    def __get_media_url(cls, product_id, file_name: str):
-        if cls.request is None:
-            base_url = "http://127.0.0.1:8000/"
-        else:
-            base_url = str(cls.request.base_url)
+    def update_media(cls, media_id: int, file=None, alt=None):
+        media = ProductMedia.get_or_404(media_id)
 
-        return f"{base_url}media/products/{product_id}/{file_name}" if file_name is not None else None
+        update_data = {}
 
-    @classmethod
-    def update_media(cls, media_id, **kwargs):
-        # check media exist
-        media: ProductMedia = ProductMedia.get_or_404(media_id)
-        file = kwargs.pop('file', None)
-        if file is not None:
-            media_service = MediaService(parent_directory="/products", sub_directory=media.product_id)
-            file_name, file_extension = media_service.save_file(file)
-            kwargs['src'] = file_name
-            kwargs['type'] = file_extension
+        #  Replace image if new file provided
+        if file:
+            # delete old cloudinary image
+            if media.cloudinary_id:
+                CloudinaryService.delete_image(media.cloudinary_id)
 
-        # TODO `updated_at` is autoupdate dont need to code
-        kwargs['updated_at'] = DateTime.now()
-        ProductMedia.update(media_id, **kwargs)
+            upload = CloudinaryService.upload_image(
+                file=file,
+                folder=f"products/{media.product_id}"
+            )
 
+            update_data.update({
+                "src": upload["secure_url"],
+                "type": upload["format"],
+                "cloudinary_id": upload["public_id"],
+            })
+
+        if alt is not None:
+            update_data["alt"] = alt
+
+        update_data["updated_at"] = DateTime.now()
+
+        ProductMedia.update(media_id, **update_data)
         return cls.retrieve_single_media(media_id)
 
     @classmethod
@@ -392,19 +377,24 @@ class ProductService:
         ProductMedia.delete(media)
         return True
 
-
-    @staticmethod
-    def delete_product(product_id):
-        Product.delete(Product.get_or_404(product_id))
-
     @classmethod
-    def delete_media_file(cls, media_id: int):
-        media = ProductMedia.get_or_404(media_id)
-        product_id = media.product_id
+    def delete_product_media(cls, product_id: int, media_ids: list[int]):
+        product = Product.get_or_404(product_id)
 
-        media_service = MediaService(parent_directory="/products", sub_directory=product_id)
-        is_fie_deleted = media_service.delete_file(media.src)
-        if is_fie_deleted:
-            ProductMedia.delete(ProductMedia.get_or_404(media_id))
-            return True
-        return False
+        for media_id in media_ids:
+            media = ProductMedia.filter(
+                ProductMedia.id == media_id,
+                ProductMedia.product_id == product.id
+            ).first()
+
+            if not media:
+                continue
+
+            # delete from cloudinary
+            if media.cloudinary_id:
+                CloudinaryService.delete_image(media.cloudinary_id)
+
+            # delete from DB (IMPORTANT FIX)
+            ProductMedia.delete(media.id)
+
+        return True

@@ -193,17 +193,16 @@ async def create_product_media(
 
 
 @router.get(
-    "/{product_id}/media",
+    '/{product_id}/media',
     status_code=status.HTTP_200_OK,
     response_model=schemas.RetrieveProductMediaOut,
-    summary="List product images",
-    tags=["Product Image"],
+    summary="Receive a list of all Product Images",
+    tags=['Product Image']
 )
 async def list_product_media(request: Request, product_id: int):
     media = ProductService(request).retrieve_media_list(product_id)
-    if not media:
-        return JSONResponse(status_code=status.HTTP_204_NO_CONTENT, content=None)
-    return {"media": media}
+    return {"media": media or []}
+
 
 
 @router.get(

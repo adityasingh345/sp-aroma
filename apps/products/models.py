@@ -85,12 +85,14 @@ class ProductMedia(FastModel):
 
     # Cloudinary URL (FULL URL)
     src = Column(String, nullable=False)
+    # public_id = Column(String, nullable=False)  # Cloudinary ID
+
 
     # image format (jpg, png, webp)
     type = Column(String, nullable=True)
 
     #  Cloudinary public_id (IMPORTANT)
-    cloudinary_id = Column(String, nullable=True, index=True)
+    cloudinary_id = Column(String, nullable=False, index=True)
 
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
