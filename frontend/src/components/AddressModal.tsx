@@ -1,0 +1,207 @@
+import { useState, useEffect } from 'react';
+import { X } from 'lucide-react';
+import { Address } from '../types';
+import { apiGetAddresses, apiCreateAddress } from '../lib/api';
+
+interface AddressModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSelectAddress: (addressId: number) => void;
+}
+
+const AddressModal = ({ isOpen, onClose, onSelectAddress }: AddressModalProps) => {
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newAddress, setNewAddress] = useState<Partial<Address>>({
+    street: '',
+    city: '',
+    state: '',
+    postal_code: '',
+    country: 'India',
+  });
+
+  useEffect(() => {
+    if (isOpen) {
+      loadAddresses();
+    }
+  }, [isOpen]);
+
+  const loadAddresses = async () => {
+    setLoading(true);
+    try {
+      const res = await apiGetAddresses();
+      setAddresses(res?.addresses || []);
+    } catch (err) {
+      console.error('Failed to load addresses', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateAddress = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await apiCreateAddress(newAddress);
+      setShowAddForm(false);
+      setNewAddress({
+        street: '',
+        city: '',
+        state: '',
+        postal_code: '',
+        country: 'India',
+      });
+      await loadAddresses();
+    } catch (err: any) {
+      console.error('Failed to create address', err);
+      alert('Failed to add address: ' + (err?.body?.detail || err?.message || 'Unknown error'));
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex justify-between items-center">
+          <h2 className="text-2xl font-light tracking-widest">Select Delivery Address</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X size={24} />
+          </button>
+        </div>
+
+        <div className="p-6">
+          {loading ? (
+            <p className="text-center py-4">Loading addresses...</p>
+          ) : (
+            <>
+              {addresses.length > 0 && (
+                <div className="space-y-4 mb-6">
+                  {addresses.map((addr) => (
+                    <div
+                      key={addr.address_id}
+                      className="border border-gray-200 rounded-lg p-4 hover:border-heading cursor-pointer transition-colors"
+                      onClick={() => {
+                        if (addr.address_id) {
+                          onSelectAddress(addr.address_id);
+                          onClose();
+                        }
+                      }}
+                    >
+                      <div className="font-medium">{addr.street}</div>
+                      <div className="text-sm text-gray-600">
+                        {addr.city}, {addr.state} {addr.postal_code}
+                      </div>
+                      <div className="text-sm text-gray-600">{addr.country}</div>
+                      {addr.is_default && (
+                        <span className="inline-block mt-2 px-2 py-1 bg-green-100 text-green-800 text-xs rounded">
+                          Default
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!showAddForm ? (
+                <button
+                  onClick={() => setShowAddForm(true)}
+                  className="w-full bg-gray-100 text-foreground py-3 rounded-md hover:bg-gray-200 transition-colors"
+                >
+                  + Add New Address
+                </button>
+              ) : (
+                <form onSubmit={handleCreateAddress} className="space-y-4 border-t pt-6">
+                  <h3 className="text-lg font-medium">Add New Address</h3>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1">
+                      Street Address *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newAddress.street}
+                      onChange={(e) => setNewAddress({ ...newAddress, street: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded focus:border-heading focus:ring-1 focus:ring-heading"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1">
+                        City *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newAddress.city}
+                        onChange={(e) => setNewAddress({ ...newAddress, city: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-200 rounded focus:border-heading focus:ring-1 focus:ring-heading"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1">
+                        State *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newAddress.state}
+                        onChange={(e) => setNewAddress({ ...newAddress, state: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-200 rounded focus:border-heading focus:ring-1 focus:ring-heading"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1">
+                        Postal Code *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newAddress.postal_code}
+                        onChange={(e) =>
+                          setNewAddress({ ...newAddress, postal_code: e.target.value })
+                        }
+                        className="w-full px-3 py-2 border border-gray-200 rounded focus:border-heading focus:ring-1 focus:ring-heading"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1">
+                        Country *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newAddress.country}
+                        onChange={(e) => setNewAddress({ ...newAddress, country: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-200 rounded focus:border-heading focus:ring-1 focus:ring-heading"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      type="submit"
+                      className="flex-1 bg-heading text-white py-3 rounded-md hover:bg-opacity-90 transition-colors"
+                    >
+                      Save Address
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddForm(false)}
+                      className="flex-1 bg-gray-100 text-foreground py-3 rounded-md hover:bg-gray-200 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default AddressModal;
