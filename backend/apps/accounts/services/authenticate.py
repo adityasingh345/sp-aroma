@@ -64,6 +64,13 @@ class AccountService:
         )
 
         token.reset_otp_token_type()
+        
+        # Send welcome email
+        user_name = user.first_name if hasattr(user, 'first_name') and user.first_name else None
+        try:
+            EmailService.send_welcome_email(user.email, user_name)
+        except Exception as e:
+            print(f"Failed to send welcome email: {e}")
 
         return {
             'access_token': token.create_access_token(),

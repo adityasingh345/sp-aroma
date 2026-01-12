@@ -154,6 +154,36 @@ class OrderService:
 
         session.commit()
         session.refresh(order)
+        
+        # Send order confirmation email
+        try:
+            from apps.core.services.email_manager import EmailService
+            from apps.accounts.models import User
+            
+            user = session.query(User).filter(User.id == user_id).first()
+            if user and user.email:
+                # Prepare order details for email
+                order_items = []
+                for item in order.items:
+                    from apps.products.models import Product
+                    product = session.query(Product).filter(Product.id == item.product_id).first()
+                    order_items.append({
+                        'product_name': product.product_name if product else 'Unknown Product',
+                        'quantity': item.quantity,
+                        'price': float(item.price * item.quantity)
+                    })
+                
+                order_details = {
+                    'order_id': order.id,
+                    'created_at': order.created_at.strftime('%B %d, %Y at %I:%M %p') if order.created_at else 'N/A',
+                    'total_amount': float(total_amount),
+                    'items': order_items
+                }
+                
+                EmailService.send_order_confirmation_email(user.email, order_details)
+        except Exception as e:
+            print(f"Failed to send order confirmation email: {e}")
+        
         return order
 
     # ------------------------

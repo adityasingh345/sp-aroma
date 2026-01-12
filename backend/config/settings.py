@@ -9,7 +9,6 @@ env_path = BASE_DIR / ".env"
 if env_path.exists():
     load_dotenv(env_path)
 
-project_name=os.getenv("PROJECT_NAME"),
 
 class AppConfig:
     class _AppConfig(BaseModel):
@@ -33,6 +32,7 @@ class AppConfig:
         # --- Resend fields loaded from .env ---
         resend_api_key=os.getenv("RESEND_API_KEY"),
         resend_from_email=os.getenv("RESEND_FROM_EMAIL"),
+        project_name=os.getenv("PROJECT_NAME", "SP Aroma"),
     )
 
 
