@@ -2,11 +2,18 @@
 // Includes data integrity checks and automatic cache invalidation
 
 const DB_NAME = 'sp_aroma_cache';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const PRODUCTS_STORE = 'products';
+const CART_STORE = 'cart';
+const ORDERS_STORE = 'orders';
+const ADDRESSES_STORE = 'addresses';
 const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
+const CART_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes for cart
 const USER_CACHE_KEY = 'sp_aroma_user';
 const PRODUCTS_CACHE_KEY = 'sp_aroma_products_meta';
+const CART_CACHE_KEY = 'sp_aroma_cart_meta';
+const ORDERS_CACHE_KEY = 'sp_aroma_orders_meta';
+const ADDRESSES_CACHE_KEY = 'sp_aroma_addresses_meta';
 
 // Generate a simple hash for data integrity check
 const generateHash = (data: any): string => {
@@ -36,6 +43,24 @@ const initDB = (): Promise<IDBDatabase> => {
         const store = db.createObjectStore(PRODUCTS_STORE, { keyPath: 'id' });
         store.createIndex('timestamp', 'timestamp', { unique: false });
         store.createIndex('category', 'category', { unique: false });
+      }
+
+      // Create cart store
+      if (!db.objectStoreNames.contains(CART_STORE)) {
+        const cartStore = db.createObjectStore(CART_STORE, { keyPath: 'id' });
+        cartStore.createIndex('timestamp', 'timestamp', { unique: false });
+      }
+
+      // Create orders store
+      if (!db.objectStoreNames.contains(ORDERS_STORE)) {
+        const ordersStore = db.createObjectStore(ORDERS_STORE, { keyPath: 'order_id' });
+        ordersStore.createIndex('timestamp', 'timestamp', { unique: false });
+      }
+
+      // Create addresses store
+      if (!db.objectStoreNames.contains(ADDRESSES_STORE)) {
+        const addressesStore = db.createObjectStore(ADDRESSES_STORE, { keyPath: 'id' });
+        addressesStore.createIndex('timestamp', 'timestamp', { unique: false });
       }
     };
   });
@@ -242,14 +267,281 @@ export const UserCache = {
 };
 
 // Cache invalidation on important events
-export const invalidateCache = (type?: 'products' | 'user' | 'all') => {
+export const invalidateCache = async (type?: 'products' | 'user' | 'cart' | 'orders' | 'addresses' | 'all') => {
   if (!type || type === 'all') {
-    ProductCache.clear();
+    await ProductCache.clear();
     UserCache.clear();
+    await CartCache.clear();
+    await OrdersCache.clear();
+    await AddressesCache.clear();
   } else if (type === 'products') {
-    ProductCache.clear();
+    await ProductCache.clear();
   } else if (type === 'user') {
     UserCache.clear();
+  } else if (type === 'cart') {
+    await CartCache.clear();
+  } else if (type === 'orders') {
+    await OrdersCache.clear();
+  } else if (type === 'addresses') {
+    await AddressesCache.clear();
+  }
+};
+
+// Cart Cache Management
+export const CartCache = {
+  async set(cartItems: any[]): Promise<void> {
+    try {
+      const db = await initDB();
+      const transaction = db.transaction([CART_STORE], 'readwrite');
+      const store = transaction.objectStore(CART_STORE);
+
+      const timestamp = Date.now();
+      await store.clear();
+
+      for (const item of cartItems) {
+        await store.add({
+          ...item,
+          _cached_at: timestamp,
+        });
+      }
+
+      localStorage.setItem(CART_CACHE_KEY, JSON.stringify({ timestamp, count: cartItems.length }));
+      db.close();
+    } catch (error) {
+      console.error('Failed to cache cart:', error);
+    }
+  },
+
+  async get(): Promise<any[] | null> {
+    try {
+      const meta = localStorage.getItem(CART_CACHE_KEY);
+      if (!meta) return null;
+
+      const { timestamp } = JSON.parse(meta);
+      if (Date.now() - timestamp > CART_CACHE_DURATION) {
+        await this.clear();
+        return null;
+      }
+
+      const db = await initDB();
+      const transaction = db.transaction([CART_STORE], 'readonly');
+      const store = transaction.objectStore(CART_STORE);
+      const request = store.getAll();
+
+      return new Promise((resolve, reject) => {
+        request.onsuccess = () => {
+          const items = request.result.map(item => {
+            const { _cached_at, ...cleanItem } = item;
+            return cleanItem;
+          });
+          db.close();
+          resolve(items.length > 0 ? items : null);
+        };
+        request.onerror = () => {
+          db.close();
+          reject(request.error);
+        };
+      });
+    } catch (error) {
+      console.error('Failed to get cached cart:', error);
+      return null;
+    }
+  },
+
+  async clear(): Promise<void> {
+    try {
+      const db = await initDB();
+      const transaction = db.transaction([CART_STORE], 'readwrite');
+      const store = transaction.objectStore(CART_STORE);
+      await store.clear();
+      db.close();
+      localStorage.removeItem(CART_CACHE_KEY);
+    } catch (error) {
+      console.error('Failed to clear cart cache:', error);
+    }
+  },
+
+  isExpired(): boolean {
+    try {
+      const meta = localStorage.getItem(CART_CACHE_KEY);
+      if (!meta) return true;
+      const { timestamp } = JSON.parse(meta);
+      return Date.now() - timestamp > CART_CACHE_DURATION;
+    } catch {
+      return true;
+    }
+  }
+};
+
+// Orders Cache Management
+export const OrdersCache = {
+  async set(orders: any[]): Promise<void> {
+    try {
+      const db = await initDB();
+      const transaction = db.transaction([ORDERS_STORE], 'readwrite');
+      const store = transaction.objectStore(ORDERS_STORE);
+
+      const timestamp = Date.now();
+      await store.clear();
+
+      for (const order of orders) {
+        await store.add({
+          ...order,
+          _cached_at: timestamp,
+        });
+      }
+
+      localStorage.setItem(ORDERS_CACHE_KEY, JSON.stringify({ timestamp, count: orders.length }));
+      db.close();
+    } catch (error) {
+      console.error('Failed to cache orders:', error);
+    }
+  },
+
+  async get(): Promise<any[] | null> {
+    try {
+      const meta = localStorage.getItem(ORDERS_CACHE_KEY);
+      if (!meta) return null;
+
+      const { timestamp } = JSON.parse(meta);
+      if (Date.now() - timestamp > CACHE_DURATION) {
+        await this.clear();
+        return null;
+      }
+
+      const db = await initDB();
+      const transaction = db.transaction([ORDERS_STORE], 'readonly');
+      const store = transaction.objectStore(ORDERS_STORE);
+      const request = store.getAll();
+
+      return new Promise((resolve, reject) => {
+        request.onsuccess = () => {
+          const orders = request.result.map(order => {
+            const { _cached_at, ...cleanOrder } = order;
+            return cleanOrder;
+          });
+          db.close();
+          resolve(orders.length > 0 ? orders : null);
+        };
+        request.onerror = () => {
+          db.close();
+          reject(request.error);
+        };
+      });
+    } catch (error) {
+      console.error('Failed to get cached orders:', error);
+      return null;
+    }
+  },
+
+  async clear(): Promise<void> {
+    try {
+      const db = await initDB();
+      const transaction = db.transaction([ORDERS_STORE], 'readwrite');
+      const store = transaction.objectStore(ORDERS_STORE);
+      await store.clear();
+      db.close();
+      localStorage.removeItem(ORDERS_CACHE_KEY);
+    } catch (error) {
+      console.error('Failed to clear orders cache:', error);
+    }
+  },
+
+  isExpired(): boolean {
+    try {
+      const meta = localStorage.getItem(ORDERS_CACHE_KEY);
+      if (!meta) return true;
+      const { timestamp } = JSON.parse(meta);
+      return Date.now() - timestamp > CACHE_DURATION;
+    } catch {
+      return true;
+    }
+  }
+};
+
+// Addresses Cache Management
+export const AddressesCache = {
+  async set(addresses: any[]): Promise<void> {
+    try {
+      const db = await initDB();
+      const transaction = db.transaction([ADDRESSES_STORE], 'readwrite');
+      const store = transaction.objectStore(ADDRESSES_STORE);
+
+      const timestamp = Date.now();
+      await store.clear();
+
+      for (const address of addresses) {
+        await store.add({
+          ...address,
+          _cached_at: timestamp,
+        });
+      }
+
+      localStorage.setItem(ADDRESSES_CACHE_KEY, JSON.stringify({ timestamp, count: addresses.length }));
+      db.close();
+    } catch (error) {
+      console.error('Failed to cache addresses:', error);
+    }
+  },
+
+  async get(): Promise<any[] | null> {
+    try {
+      const meta = localStorage.getItem(ADDRESSES_CACHE_KEY);
+      if (!meta) return null;
+
+      const { timestamp } = JSON.parse(meta);
+      if (Date.now() - timestamp > CACHE_DURATION) {
+        await this.clear();
+        return null;
+      }
+
+      const db = await initDB();
+      const transaction = db.transaction([ADDRESSES_STORE], 'readonly');
+      const store = transaction.objectStore(ADDRESSES_STORE);
+      const request = store.getAll();
+
+      return new Promise((resolve, reject) => {
+        request.onsuccess = () => {
+          const addresses = request.result.map(address => {
+            const { _cached_at, ...cleanAddress } = address;
+            return cleanAddress;
+          });
+          db.close();
+          resolve(addresses.length > 0 ? addresses : null);
+        };
+        request.onerror = () => {
+          db.close();
+          reject(request.error);
+        };
+      });
+    } catch (error) {
+      console.error('Failed to get cached addresses:', error);
+      return null;
+    }
+  },
+
+  async clear(): Promise<void> {
+    try {
+      const db = await initDB();
+      const transaction = db.transaction([ADDRESSES_STORE], 'readwrite');
+      const store = transaction.objectStore(ADDRESSES_STORE);
+      await store.clear();
+      db.close();
+      localStorage.removeItem(ADDRESSES_CACHE_KEY);
+    } catch (error) {
+      console.error('Failed to clear addresses cache:', error);
+    }
+  },
+
+  isExpired(): boolean {
+    try {
+      const meta = localStorage.getItem(ADDRESSES_CACHE_KEY);
+      if (!meta) return true;
+      const { timestamp } = JSON.parse(meta);
+      return Date.now() - timestamp > CACHE_DURATION;
+    } catch {
+      return true;
+    }
   }
 };
 

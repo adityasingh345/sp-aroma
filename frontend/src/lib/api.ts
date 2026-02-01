@@ -2,10 +2,10 @@
 // API CONFIG
 // ===============================
 
-import { ProductCache, UserCache, invalidateCache, verifyCriticalData } from './cache';
+import { ProductCache, UserCache, CartCache, OrdersCache, AddressesCache, invalidateCache, verifyCriticalData } from './cache';
 
 // Export cache utilities for components
-export { ProductCache, UserCache, invalidateCache, verifyCriticalData };
+export { ProductCache, UserCache, CartCache, OrdersCache, AddressesCache, invalidateCache, verifyCriticalData };
 
 // In dev: Vite proxy → relative paths
 // In prod: absolute backend URL
@@ -373,41 +373,131 @@ export const apiVerifyProductData = async (productId: number, variantId?: number
 // ===============================
 // ADDRESSES API
 // ===============================
-export const apiGetAddresses = () => getJson('/addresses/');
+export const apiGetAddresses = async () => {
+  try {
+    // Check cache first for instant response
+    const cached = await AddressesCache.get();
+    if (cached && !AddressesCache.isExpired()) {
+      console.log('✅ Returning cached addresses data (instant)');
+      
+      // Background refresh to keep data fresh
+      getJson('/addresses/').then(async (freshData) => {
+        if (freshData) {
+          await AddressesCache.set(freshData);
+          console.log('🔄 Addresses cache refreshed in background');
+        }
+      }).catch(err => console.warn('Background addresses refresh failed:', err));
+      
+      return cached;
+    }
+    
+    // Cache miss - fetch from API
+    console.log('⚠️ Addresses cache miss - fetching from API');
+    const response = await getJson('/addresses/');
+    if (response) {
+      await AddressesCache.set(response);
+    }
+    return response;
+  } catch (error) {
+    console.error('Error in apiGetAddresses:', error);
+    throw error;
+  }
+};
 
 export const apiGetAddress = (addressId: number) =>
   getJson(`/addresses/${addressId}`);
 
-export const apiCreateAddress = (data: any) =>
-  postJson('/addresses/', data);
+export const apiCreateAddress = async (data: any) => {
+  const response = await postJson('/addresses/', data);
+  if (response) {
+    await invalidateCache('addresses');
+  }
+  return response;
+};
 
-export const apiUpdateAddress = (addressId: number, data: any) =>
-  putJson(`/addresses/${addressId}`, data);
+export const apiUpdateAddress = async (addressId: number, data: any) => {
+  const response = await putJson(`/addresses/${addressId}`, data);
+  if (response) {
+    await invalidateCache('addresses');
+  }
+  return response;
+};
 
-export const apiDeleteAddress = (addressId: number) =>
-  deleteJson(`/addresses/${addressId}`);
+export const apiDeleteAddress = async (addressId: number) => {
+  const response = await deleteJson(`/addresses/${addressId}`);
+  if (response) {
+    await invalidateCache('addresses');
+  }
+  return response;
+};
 
 // ===============================
 // CART API
 // ===============================
-export const apiGetCart = () => getJson('/cart/');
+export const apiGetCart = async () => {
+  try {
+    // Check cache first for instant response
+    const cached = await CartCache.get();
+    if (cached && !CartCache.isExpired()) {
+      console.log('✅ Returning cached cart data (instant)');
+      
+      // Background refresh to keep data fresh
+      getJson('/cart/').then(async (freshData) => {
+        if (freshData) {
+          await CartCache.set(freshData);
+          console.log('🔄 Cart cache refreshed in background');
+        }
+      }).catch(err => console.warn('Background cart refresh failed:', err));
+      
+      return cached;
+    }
+    
+    // Cache miss - fetch from API
+    console.log('⚠️ Cart cache miss - fetching from API');
+    const response = await getJson('/cart/');
+    if (response) {
+      await CartCache.set(response);
+    }
+    return response;
+  } catch (error) {
+    console.error('Error in apiGetCart:', error);
+    throw error;
+  }
+};
 
-export const apiAddToCart = (product_id: number, quantity: number, variant_id?: number) =>
-  postJson('/cart/add', { product_id, quantity, variant_id });
+export const apiAddToCart = async (product_id: number, quantity: number, variant_id?: number) => {
+  const response = await postJson('/cart/add', { product_id, quantity, variant_id });
+  if (response) {
+    await invalidateCache('cart'); // Clear cache to fetch fresh data
+  }
+  return response;
+};
 
-export const apiUpdateCartItem = (itemId: number, quantity: number) =>
-  putJson(`/cart/item/${itemId}`, { quantity });
+export const apiUpdateCartItem = async (itemId: number, quantity: number) => {
+  const response = await putJson(`/cart/item/${itemId}`, { quantity });
+  if (response) {
+    await invalidateCache('cart');
+  }
+  return response;
+};
 
-export const apiDeleteCartItem = (itemId: number) =>
-  deleteJson(`/cart/item/${itemId}`);
+export const apiDeleteCartItem = async (itemId: number) => {
+  const response = await deleteJson(`/cart/item/${itemId}`);
+  if (response) {
+    await invalidateCache('cart');
+  }
+  return response;
+};
 
 export const apiCheckout = async (addressId: number) => {
   const response = await postJson(`/cart/checkout?address_id=${addressId}`, {});
   
-  // After successful checkout, invalidate product cache since stock has changed
+  // After successful checkout, invalidate caches
   if (response?.order || response?.success) {
-    console.log('✅ Order placed - invalidating product cache');
-    await invalidateCache('products');
+    console.log('✅ Order placed - invalidating product, cart, and orders cache');
+    await invalidateCache('products'); // Stock changed
+    await invalidateCache('cart'); // Cart is now empty
+    await invalidateCache('orders'); // New order added
   }
   
   return response;
@@ -416,7 +506,36 @@ export const apiCheckout = async (addressId: number) => {
 // ===============================
 // ORDERS API
 // ===============================
-export const apiGetOrders = () => getJson('/orders/');
+export const apiGetOrders = async () => {
+  try {
+    // Check cache first for instant response
+    const cached = await OrdersCache.get();
+    if (cached && !OrdersCache.isExpired()) {
+      console.log('✅ Returning cached orders data (instant)');
+      
+      // Background refresh to keep data fresh
+      getJson('/orders/').then(async (freshData) => {
+        if (freshData) {
+          await OrdersCache.set(freshData);
+          console.log('🔄 Orders cache refreshed in background');
+        }
+      }).catch(err => console.warn('Background orders refresh failed:', err));
+      
+      return cached;
+    }
+    
+    // Cache miss - fetch from API
+    console.log('⚠️ Orders cache miss - fetching from API');
+    const response = await getJson('/orders/');
+    if (response) {
+      await OrdersCache.set(response);
+    }
+    return response;
+  } catch (error) {
+    console.error('Error in apiGetOrders:', error);
+    throw error;
+  }
+};
 
 export const apiGetOrder = (orderId: number) =>
   getJson(`/orders/${orderId}`);
