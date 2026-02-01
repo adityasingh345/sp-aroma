@@ -2,6 +2,7 @@ from itertools import product as options_combination
 
 from fastapi import Request
 from sqlalchemy import select, and_, or_
+from sqlalchemy.orm import joinedload
 
 from apps.core.date_time import DateTime
 # from apps.core.services.media import MediaService
@@ -338,26 +339,88 @@ class ProductService:
 
     @classmethod
     def list_products(cls, limit: int = 100):
-        # - if "default variant" is not set, first variant will be
-        # - on list of products, for price, get it from "default variant"
-        # - if price or stock of default variant is 0 then select first variant that is not 0
-        # - or for price, get it from "less price"
-        # do all of them with graphql and let the front devs decide witch query should be run.
-
-        # also can override the list `limit` in settings.py
+        """
+        Optimized list_products with eager loading to prevent N+1 queries.
+        Instead of 400+ queries, this makes 1 query with joins.
+        """
+        # Override limit from settings if configured
         if hasattr(settings, 'products_list_limit'):
             limit = settings.products_list_limit
 
-        products_list = []
         with SessionLocal() as session:
-            products = session.execute(
-                select(Product.id).limit(limit)
-            ).scalars().all()
+            # Eager load ALL related data in a SINGLE query with joins
+            products = session.query(Product).options(
+                joinedload(Product.options).joinedload(ProductOption.option_items),
+                joinedload(Product.variants),
+                joinedload(Product.media)
+            ).limit(limit).all()
 
-        for product_id in products:
-            products_list.append(cls.retrieve_product(product_id))
+            # Serialize all products efficiently
+            products_list = []
+            for product in products:
+                # Serialize options
+                options_list = []
+                for option in product.options:
+                    options_list.append({
+                        'options_id': option.id,  # ✅ Fixed: was option_id
+                        'option_name': option.option_name,
+                        'items': [
+                            {
+                                'item_id': item.id,
+                                'item_name': item.item_name
+                            }
+                            for item in option.option_items
+                        ]
+                    })
 
-        return products_list
+                # Serialize variants
+                variants_list = []
+                for variant in product.variants:
+                    variants_list.append({
+                        'variant_id': variant.id,
+                        'product_id': product.id,  # ✅ Fixed: added missing field
+                        'option1': variant.option1,
+                        'option2': variant.option2,
+                        'option3': variant.option3,
+                        'price': float(variant.price),
+                        'stock': variant.stock,
+                        'created_at': DateTime.string(variant.created_at),
+                        'updated_at': DateTime.string(variant.updated_at)
+                    })
+
+                # Serialize media
+                media_list = []
+                for media in product.media:
+                    media_list.append({
+                        'media_id': media.id,
+                        'product_id': media.product_id,
+                        'variant_id': media.variant_id,
+                        'alt': media.alt,
+                        'src': media.src,
+                        'type': media.type,
+                        'created_at': DateTime.string(media.created_at),
+                        'updated_at': DateTime.string(media.updated_at)
+                    })
+
+                # Build final product dict
+                products_list.append({
+                    'product_id': product.id,
+                    'product_name': product.product_name,
+                    'description': product.description,
+                    'ingredients': product.ingredients,
+                    'how_to_use': product.how_to_use,
+                    'category': product.category,
+                    'product_type': product.product_type,
+                    'status': product.status,
+                    'created_at': DateTime.string(product.created_at),
+                    'updated_at': DateTime.string(product.updated_at),
+                    'published_at': DateTime.string(product.published_at),
+                    'options': options_list or None,
+                    'variants': variants_list,
+                    'media': media_list or None
+                })
+
+            return products_list
 
     @staticmethod
     def delete_product(product_id: int):

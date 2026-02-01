@@ -1,7 +1,7 @@
 # apps/cart/services.py
 
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from config.database import SessionLocal
 from apps.cart.models import Cart, CartItem
@@ -108,9 +108,15 @@ class CartService:
 
     @classmethod
     def get_cart(cls, user_id: int):
+        """Optimized get_cart with eager loading to prevent N+1 queries"""
         session = SessionLocal()
         try:
-            cart = session.query(Cart).filter_by(user_id=user_id).first()
+            # Eager load cart items with product and variant in single query
+            cart = session.query(Cart).options(
+                joinedload(Cart.items).joinedload(CartItem.product),
+                joinedload(Cart.items).joinedload(CartItem.variant)
+            ).filter_by(user_id=user_id).first()
+            
             if not cart:
                 return {"items": [], "total_amount": 0, "currency": "INR"}
             return cls._serialize_cart(cart)
