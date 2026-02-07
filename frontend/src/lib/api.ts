@@ -251,8 +251,8 @@ export const apiGetProducts = async () => {
   // Try to get from cache first
   const cached = await ProductCache.get();
   if (cached && !ProductCache.isExpired()) {
-    console.log('📦 Using cached products');
-    return { products: cached };
+    
+    return cached
   }
 
   // Cache miss or expired - fetch from API
@@ -264,7 +264,7 @@ export const apiGetProducts = async () => {
     await ProductCache.set(response.products);
   }
   
-  return response;
+  return response.products
 };
 
 
