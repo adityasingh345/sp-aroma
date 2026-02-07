@@ -35,6 +35,13 @@ export interface Product {
   longDescription: string;
   ingredients: string;
   howToUse: string;
+
+  variantId?: number;
+  selectedOption?: string;
+  variantName?: string;
+  variantPrice?: string | number;
+  stock?: number;
+  quantity?: number;
 }
 
 export interface CartItem extends Product {

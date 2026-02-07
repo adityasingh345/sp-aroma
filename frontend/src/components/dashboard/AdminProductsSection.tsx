@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { apiGetProducts, apiCreateProduct, apiUpdateProduct, apiDeleteProduct } from '../../lib/api';
+import { apiGetProducts, apiUpdateProduct, apiDeleteProduct } from '../../lib/api';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../contexts/ConfirmDialogContext';
 
@@ -29,23 +29,37 @@ const AdminProductsSection = () => {
     load();
   }, []);
 
-  const handleCreate = async (e: any) => {
+  const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
+
     try {
-      await apiCreateProduct({
+      // Format the data exactly as backend expects
+      const payload = {
         product_name: newProd.product_name,
         description: newProd.description,
+        ingredients: newProd.ingredients || '',
+        how_to_use: newProd.how_to_use || '',
+        category: newProd.category || '',
+        product_type: newProd.product_type,
         status: newProd.status,
-        price: Number(newProd.price || 0),
-      });
-      setNewProd(emptyNew);
-      setCreating(false);
-      await load();
+        options: newProd.options,
+        variants: newProd.variants.map((v: any) => ({
+          option1: v.option1 || null,
+          price: parseFloat(v.price) || 0,
+          stock: parseInt(v.stock) || 0
+        })),
+        product_images: newProd.product_images || []
+      };
+
+      console.log('Creating product with:', payload);
+
       showSuccess('Product created successfully!');
+      resetForm();
+      await load();
+
     } catch (err: any) {
-      console.error(err);
-      const errorMsg = err?.body?.detail || err?.message || 'Failed to create product';
-      showError('Error: ' + errorMsg);
+      console.error('Create product error:', err);
+      showError(err.message || 'Failed to create product');
     }
   };
 
@@ -93,7 +107,7 @@ const AdminProductsSection = () => {
       </div>
 
       {creating && (
-        <form onSubmit={handleCreate} className="space-y-3 mb-6 p-4 border border-gray-200 rounded">
+        <form onSubmit={handleCreateProduct} className="space-y-3 mb-6 p-4 border border-gray-200 rounded">
           <input
             placeholder="Product Name"
             value={newProd.product_name}
@@ -241,3 +255,7 @@ const InlineEdit = ({
 };
 
 export default AdminProductsSection;
+function resetForm() {
+  throw new Error('Function not implemented.');
+}
+

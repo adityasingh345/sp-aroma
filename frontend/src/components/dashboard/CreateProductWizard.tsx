@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, Check, X, Eye, Upload, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, X, Upload, Trash2 } from 'lucide-react';
 import { apiCreateProductComprehensive, apiUploadImageTemp } from '../../lib/api';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -84,12 +84,42 @@ const CreateProductWizard = ({ onClose, onSuccess }: CreateProductWizardProps) =
     if (!newOptionName || !newOptionItems) return;
 
     const items = newOptionItems.split(',').map(item => item.trim()).filter(Boolean);
+
     if (items.length === 0) return;
 
-    setFormData({
-      ...formData,
-      options: [...formData.options, { option_name: newOptionName, items }],
-    });
+    const cleanName = newOptionName.trim();
+
+    const existingIndex = formData.options.findIndex(
+      opt => opt.option_name.trim().toLowerCase() === cleanName.toLowerCase()
+    );
+
+    let updatedOptions = [...formData.options];
+
+    if (existingIndex !== -1) {
+      // ✅ Option exists → append new values
+      const existingItems = updatedOptions[existingIndex].items;
+
+      const mergedItems = Array.from(
+        new Set([...existingItems, ...items])
+      );
+
+      updatedOptions[existingIndex] = {
+        ...updatedOptions[existingIndex],
+        items: mergedItems,
+      };
+    } else {
+      // ✅ New option
+      updatedOptions.push({
+        option_name: newOptionName,
+        items,
+      });
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      options: updatedOptions,
+      variants: [] // 🔥 force regenerate
+    }));
 
     setNewOptionName('');
     setNewOptionItems('');
@@ -115,7 +145,7 @@ const CreateProductWizard = ({ onClose, onSuccess }: CreateProductWizardProps) =
 
     // Generate all combinations of option values
     const combinations: string[][] = [[]];
-    
+
     for (const option of options) {
       const newCombinations: string[][] = [];
       for (const combo of combinations) {
@@ -151,7 +181,7 @@ const CreateProductWizard = ({ onClose, onSuccess }: CreateProductWizardProps) =
     try {
       // Upload images to Cloudinary immediately
       const uploads = await apiUploadImageTemp(files);
-      
+
       const imageDataArray: VariantImage[] = uploads.map(upload => ({
         src: upload.src,
         cloudinary_id: upload.cloudinary_id,
@@ -192,6 +222,8 @@ const CreateProductWizard = ({ onClose, onSuccess }: CreateProductWizardProps) =
     setLoading(true);
     try {
       // All images are already uploaded to Cloudinary, just submit the data
+      console.log("FINAL PAYLOAD SENT TO BACKEND:", formData);
+
       await apiCreateProductComprehensive(formData);
       showSuccess('Product created successfully!');
       onSuccess();
@@ -275,7 +307,7 @@ const CreateProductWizard = ({ onClose, onSuccess }: CreateProductWizardProps) =
                 Add options like Color, Size, Material. Maximum 3 options allowed.
               </p>
             </div>
-            
+
             {/* Add Option Form */}
             <div className="border rounded-lg p-4 bg-gray-50">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -333,7 +365,7 @@ const CreateProductWizard = ({ onClose, onSuccess }: CreateProductWizardProps) =
         return (
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Product Variants</h3>
-            
+
             {formData.options.length > 0 && formData.variants.length === 0 && (
               <button
                 onClick={handleGenerateVariants}
@@ -389,7 +421,7 @@ const CreateProductWizard = ({ onClose, onSuccess }: CreateProductWizardProps) =
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Product Images</h3>
             <p className="text-sm text-gray-600">Upload general product images (shown in product listings)</p>
-            
+
             <div className="border-2 border-dashed rounded-lg p-8 text-center">
               <Upload className="w-12 h-12 mx-auto text-gray-400 mb-4" />
               <input
@@ -434,14 +466,14 @@ const CreateProductWizard = ({ onClose, onSuccess }: CreateProductWizardProps) =
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Variant-Specific Images</h3>
             <p className="text-sm text-gray-600">Upload images for individual variants (shown when variant is selected)</p>
-            
+
             <div className="space-y-6 max-h-96 overflow-y-auto">
               {formData.variants.map((variant, vIndex) => (
                 <div key={vIndex} className="border rounded-lg p-4 bg-gray-50">
                   <p className="font-semibold mb-3">
                     {[variant.option1, variant.option2, variant.option3].filter(Boolean).join(' / ') || 'Default Variant'}
                   </p>
-                  
+
                   <div className="mb-3">
                     <input
                       type="file"
@@ -488,12 +520,12 @@ const CreateProductWizard = ({ onClose, onSuccess }: CreateProductWizardProps) =
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Preview Product</h3>
             <p className="text-sm text-gray-600">This is how your product will appear on the website</p>
-            
+
             {/* Product Card Preview */}
             <div className="border rounded-lg overflow-hidden bg-white shadow-lg max-w-sm mx-auto">
               {formData.product_images.length > 0 ? (
-                <img 
-                  src={formData.product_images[0].src} 
+                <img
+                  src={formData.product_images[0].src}
                   alt={formData.product_name}
                   className="w-full h-64 object-cover"
                 />
@@ -502,13 +534,13 @@ const CreateProductWizard = ({ onClose, onSuccess }: CreateProductWizardProps) =
                   <p className="text-gray-400">No image</p>
                 </div>
               )}
-              
+
               <div className="p-6">
                 <h4 className="text-xl font-bold mb-2">{formData.product_name || 'Product Name'}</h4>
                 <p className="text-gray-600 text-sm mb-4 line-clamp-3">
                   {formData.description || 'No description'}
                 </p>
-                
+
                 <div className="flex items-center justify-between">
                   <div>
                     {formData.variants.length > 0 && (
@@ -519,11 +551,10 @@ const CreateProductWizard = ({ onClose, onSuccess }: CreateProductWizardProps) =
                       </p>
                     )}
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                    formData.status === 'active' ? 'bg-green-100 text-green-800' :
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${formData.status === 'active' ? 'bg-green-100 text-green-800' :
                     formData.status === 'draft' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
+                      'bg-gray-100 text-gray-800'
+                    }`}>
                     {formData.status}
                   </span>
                 </div>
@@ -591,11 +622,10 @@ const CreateProductWizard = ({ onClose, onSuccess }: CreateProductWizardProps) =
             {steps.map((step, index) => (
               <div key={index} className="flex items-center">
                 <div className={`flex flex-col items-center ${index <= currentStep - 1 ? 'text-indigo-600' : 'text-gray-400'}`}>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${
-                    index < currentStep - 1 ? 'bg-indigo-600 border-indigo-600' :
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${index < currentStep - 1 ? 'bg-indigo-600 border-indigo-600' :
                     index === currentStep - 1 ? 'border-indigo-600' :
-                    'border-gray-300'
-                  }`}>
+                      'border-gray-300'
+                    }`}>
                     {index < currentStep - 1 ? (
                       <Check className="w-5 h-5 text-white" />
                     ) : (

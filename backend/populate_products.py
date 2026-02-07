@@ -190,12 +190,41 @@ def populate_products():
         
         print("Starting to populate products...")
         
+        existing_names = {
+                name
+                for (name,) in db.query(Product.product_name).all()
+            }
+            
+        new_products = []
+        new_variants = []
+        new_media = []
+        
         for data in products_data:
             # Check if product already exists
-            existing = db.query(Product).filter(Product.product_name == data["product_name"]).first()
-            if existing:
+        
+            if data["product_name"] in existing_names:
                 print(f"Product '{data['product_name']}' already exists. Skipping...")
                 continue
+            
+            product = Product(
+                product_name=data["product_name"],
+                description=data["description"],
+                ingredients=data["ingredients"],
+                how_to_use=data["how_to_use"],
+                category=data["category"],
+                product_type=data["product_type"],
+                status=data["status"],
+            )
+            
+            # new_products.append(product)
+            # existing_names.add(data["product_name"])
+    
+            
+            # existing = db.query(Product).filter(Product.product_name == data["product_name"]).first()
+            
+            # if existing:
+            #     print(f"Product '{data['product_name']}' already exists. Skipping...")
+            #     continue
             
             # Create product
             product = Product(
@@ -207,20 +236,22 @@ def populate_products():
                 product_type=data["product_type"],
                 status=data["status"]
             )
-            db.add(product)
+            
+            new_products.append(product)
+            existing_names.add(data["product_name"])
+            
+            db.add(new_products)
             db.flush()  # Get the product ID
             
             # Create variant
-            variant = ProductVariant(
-                product_id=product.id,
-                price=data["price"],
-                stock=data["stock"]
-            )
-            db.add(variant)
-            db.flush()
-            
-            # Create media
-            media = ProductMedia(
+            for product, data in zip(new_products, products_data):
+                variant = ProductVariant(
+                    product_id=product.id,
+                    price=data["price"],
+                    stock=data["stock"]
+                )
+                
+                media = ProductMedia(
                 product_id=product.id,
                 variant_id=None,
                 src=data["image_url"],
@@ -228,12 +259,19 @@ def populate_products():
                 alt=data["product_name"],
                 type="image"
             )
-            db.add(media)
+                
+            new_variants.append(variant)
+            new_media.append(media)
+                
+            new_variants.append(variant)
+            new_media.append(media)
+            # Create media
             
-            print(f"✓ Created: {data['product_name']} ({data['product_type']}) - {data['category']}")
+            db.commit()
+            
         
         db.commit()
-        print("\n✓ All products populated successfully!")
+        print(f"✅ Inserted {len(new_products)} new products")
         
     except Exception as e:
         print(f"\n✗ Error: {e}")

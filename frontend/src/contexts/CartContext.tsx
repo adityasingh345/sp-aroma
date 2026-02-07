@@ -1,19 +1,31 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-import { Product, CartItem } from '../types';
+import { Product } from '../types';
 import { useAuth } from './AuthContext';
-import { 
-  apiGetCart, 
-  apiAddToCart, 
-  apiUpdateCartItem, 
-  apiDeleteCartItem, 
-  apiVerifyProductData 
+import {
+  apiGetCart,
+  apiAddToCart,
+  apiUpdateCartItem,
+  apiDeleteCartItem,
+  apiVerifyProductData
 } from '../lib/api';
+
+// Define CartItem interface that extends Product with cart-specific properties
+interface CartItem extends Product {
+  quantity: number;
+  variantId?: number;
+  selectedOption?: string;
+  variantName?: string;
+  variantPrice?: string | number;
+  variantSize?: string;
+  stock?: number;
+  cartItemId?: number; // For backend cart item ID
+}
 
 interface CartContextType {
   cartItems: CartItem[];
-  addToCart: (product: Product, quantity: number) => Promise<void>;
-  removeFromCart: (productId: number) => Promise<void>;
-  updateItemQuantity: (productId: number, quantity: number) => Promise<void>;
+  addToCart: (product: Product, quantity: number, variantId?: number) => Promise<void>;
+  removeFromCart: (productId: number, variantId?: number) => Promise<void>;
+  updateItemQuantity: (productId: number, quantity: number, variantId?: number) => Promise<void>;
   clearCart: () => void;
   cartCount: number;
   cartTotal: number;
@@ -28,6 +40,27 @@ export const useCart = () => {
     throw new Error('useCart must be used within a CartProvider');
   }
   return context;
+};
+
+// Helper function to check if two items are the same (considering variant)
+const areItemsSame = (item1: CartItem, item2: CartItem): boolean => {
+  // First check product ID
+  if (item1.id !== item2.id) return false;
+
+  // Then check variant ID
+  const variantId1 = item1.variantId;
+  const variantId2 = item2.variantId;
+
+  // If both have no variantId, they're the same
+  if (!variantId1 && !variantId2) return true;
+
+  // If both have variantId, compare them
+  if (variantId1 && variantId2) {
+    return variantId1 === variantId2;
+  }
+
+  // One has variantId, the other doesn't - they're different
+  return false;
 };
 
 export const CartProvider = ({ children }: { children: ReactNode }) => {
@@ -56,7 +89,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
 
       // Map backend cart items to frontend CartItem format
       const serverItems: CartItem[] = serverItemsRaw.map((it: any) => ({
-        id: it.product_id ?? it.variant_id ?? it.id ?? 0,
+        id: it.product_id ?? it.id ?? 0,
         cartItemId: it.item_id ?? it.id,
         variantId: it.variant_id,
         name: it.product_name ?? it.name ?? '',
@@ -65,11 +98,19 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         originalPrice: undefined,
         imageUrl: (it.image_url ?? it.imageUrl ?? it.media?.[0]?.src) || '',
         categories: it.categories ?? [],
+        category: it.category,
+        product_type: it.product_type,
         shortDescription: it.description ?? it.shortDescription ?? '',
         longDescription: it.longDescription ?? '',
         ingredients: it.ingredients ?? '',
         howToUse: it.howToUse ?? '',
         quantity: it.quantity ?? it.qty ?? 1,
+        // Variant information
+        variantName: it.variant_name || it.variantName || '',
+        variantSize: it.variant_size || it.variantSize || '',
+        selectedOption: it.selected_option || it.selectedOption || '',
+        variantPrice: it.variant_price || it.variantPrice || it.price,
+        stock: it.stock
       }));
 
       setCartItems(serverItems);
@@ -85,81 +126,102 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       await refreshCart();
     };
     syncFromServer();
-    return () => { mounted = false };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { mounted = false; };
   }, [user]);
 
-  const addToCart = async (product: Product, quantity: number) => {
+  const addToCart = async (product: Product, quantity: number, variantId?: number) => {
+    // Extract variant information from product
+    const extractedVariantId = variantId || (product as any).variantId;
+    
+    // Create new cart item
+    const newCartItem: CartItem = {
+      ...product,
+      quantity: quantity,
+      variantId: extractedVariantId,
+      selectedOption: (product as any).selectedOption,
+      variantName: (product as any).variantName,
+      variantPrice: (product as any).variantPrice || product.price,
+      variantSize: (product as any).variantSize,
+      stock: (product as any).stock
+    };
+
     // CRITICAL: Always verify price and stock from backend before adding to cart
     try {
-      const variantId = (product as any).variantId;
-      const verification = await apiVerifyProductData(product.id, variantId);
-      
-      // Check if product is available
+      const verification = await apiVerifyProductData(product.id, extractedVariantId);
+
       if (!verification.available) {
         throw new Error('Product is out of stock');
       }
-      
-      // Check if enough stock is available
+
       if (verification.stock < quantity) {
         throw new Error(`Only ${verification.stock} items available in stock`);
       }
-      
-      // Optionally: Check if price has changed (uncomment if needed)
-      // const expectedPrice = parseFloat(product.price.replace('₹', ''));
-      // if (Math.abs(verification.price - expectedPrice) > 0.01) {
-      //   console.warn('Price has changed!', { expected: expectedPrice, actual: verification.price });
-      // }
-      
     } catch (err: any) {
       console.error('Product verification failed:', err);
-      // Toast will be shown by the component
       throw err;
     }
 
     if (user) {
       // Add to backend cart
       try {
-        // Send product_id and optional variant_id
-        const variantId = (product as any).variantId;
-        await apiAddToCart(product.id, quantity, variantId);
+        await apiAddToCart(product.id, quantity, extractedVariantId);
         await refreshCart();
       } catch (err) {
         console.error('Failed to add to cart on backend', err);
         // Fall back to local cart
         setCartItems(prevItems => {
-          const existingItem = prevItems.find(item => item.id === product.id);
-          if (existingItem) {
-            return prevItems.map(item =>
-              item.id === product.id
-                ? { ...item, quantity: item.quantity + quantity }
-                : item
-            );
+          // Check if exact same item (with same variant) already exists
+          const existingItemIndex = prevItems.findIndex(item =>
+            areItemsSame(item, newCartItem)
+          );
+
+          if (existingItemIndex !== -1) {
+            // Update quantity of existing item
+            const updatedItems = [...prevItems];
+            updatedItems[existingItemIndex] = {
+              ...updatedItems[existingItemIndex],
+              quantity: updatedItems[existingItemIndex].quantity + quantity
+            };
+            return updatedItems;
           }
-          return [...prevItems, { ...product, quantity }];
+
+          // Add as new item
+          return [...prevItems, newCartItem];
         });
       }
     } else {
       // Not logged in - use local cart
       setCartItems(prevItems => {
-        const existingItem = prevItems.find(item => item.id === product.id);
-        if (existingItem) {
-          return prevItems.map(item =>
-            item.id === product.id
-              ? { ...item, quantity: item.quantity + quantity }
-              : item
-          );
+        // Check if exact same item (with same variant) already exists
+        const existingItemIndex = prevItems.findIndex(item =>
+          areItemsSame(item, newCartItem)
+        );
+
+        if (existingItemIndex !== -1) {
+          // Update quantity of existing item
+          const updatedItems = [...prevItems];
+          updatedItems[existingItemIndex] = {
+            ...updatedItems[existingItemIndex],
+            quantity: updatedItems[existingItemIndex].quantity + quantity
+          };
+          return updatedItems;
         }
-        return [...prevItems, { ...product, quantity }];
+
+        // Add as new item
+        return [...prevItems, newCartItem];
       });
     }
   };
 
-  const removeFromCart = async (productId: number) => {
+  const removeFromCart = async (productId: number, variantId?: number) => {
     if (user) {
       try {
-        // Find cart item ID for this product
-        const cartItem = cartItems.find(item => item.id === productId);
+        // Find cart item ID for this product with specific variant
+        const cartItem = cartItems.find(item =>
+          item.id === productId &&
+          item.variantId === variantId
+        );
+
         if (cartItem?.cartItemId) {
           await apiDeleteCartItem(cartItem.cartItemId);
         }
@@ -167,22 +229,34 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       } catch (err) {
         console.error('Failed to remove from cart on backend', err);
         // Fall back to local removal
-        setCartItems(prevItems => prevItems.filter(item => item.id !== productId));
+        setCartItems(prevItems =>
+          prevItems.filter(item =>
+            !(item.id === productId && item.variantId === variantId)
+          )
+        );
       }
     } else {
-      setCartItems(prevItems => prevItems.filter(item => item.id !== productId));
+      setCartItems(prevItems =>
+        prevItems.filter(item =>
+          !(item.id === productId && item.variantId === variantId)
+        )
+      );
     }
   };
 
-  const updateItemQuantity = async (productId: number, quantity: number) => {
+  const updateItemQuantity = async (productId: number, quantity: number, variantId?: number) => {
     if (quantity <= 0) {
-      await removeFromCart(productId);
+      await removeFromCart(productId, variantId);
       return;
     }
 
     if (user) {
       try {
-        const cartItem = cartItems.find(item => item.id === productId);
+        const cartItem = cartItems.find(item =>
+          item.id === productId &&
+          item.variantId === variantId
+        );
+
         if (cartItem?.cartItemId) {
           await apiUpdateCartItem(cartItem.cartItemId, quantity);
         }
@@ -192,14 +266,18 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         // Fall back to local update
         setCartItems(prevItems =>
           prevItems.map(item =>
-            item.id === productId ? { ...item, quantity: Math.max(0, quantity) } : item
+            item.id === productId && item.variantId === variantId
+              ? { ...item, quantity: Math.max(0, quantity) }
+              : item
           ).filter(item => item.quantity > 0)
         );
       }
     } else {
       setCartItems(prevItems =>
         prevItems.map(item =>
-          item.id === productId ? { ...item, quantity: Math.max(0, quantity) } : item
+          item.id === productId && item.variantId === variantId
+            ? { ...item, quantity: Math.max(0, quantity) }
+            : item
         ).filter(item => item.quantity > 0)
       );
     }
@@ -212,11 +290,13 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   const cartCount = cartItems.reduce((count, item) => count + item.quantity, 0);
 
   const cartTotal = cartItems.reduce((total, item) => {
-    const price = parseFloat(item.price.replace('₹', '').replace(',', ''));
+    // Use variantPrice if available, otherwise use regular price
+    const priceValue = item.variantPrice || item.price;
+    const price = parseFloat(priceValue.toString().replace('₹', '').replace(',', ''));
     return total + price * item.quantity;
   }, 0);
 
-  const value = {
+  const value: CartContextType = {
     cartItems,
     addToCart,
     removeFromCart,

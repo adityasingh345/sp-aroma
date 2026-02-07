@@ -267,26 +267,30 @@ export const apiGetProducts = async () => {
   return response;
 };
 
-export const apiGetProduct = async (productId: number | string) => {
-  // Try to get from cache first
-  const cached = await ProductCache.getById(Number(productId));
-  if (cached) {
-    console.log(`📦 Using cached product ${productId}`);
-    return { product: cached };
-  }
-
-  // Cache miss - fetch from API
-  console.log(`🌐 Fetching product ${productId} from API`);
-  const response = await getJsonPublic(`/products/${productId}`);
-  
-  // Note: Individual product fetches don't update cache
-  // Cache is only updated by apiGetProducts() to maintain consistency
-  
-  return response;
+export const apiGetProduct = async (productId: string | number) => {
+  const response = await fetch(`/products/${productId}`);
+  if (!response.ok) throw new Error('Product not found');
+  return response.json();
 };
 
-export const apiCreateProduct = (data: any) =>
-  postJson('/products/', data);
+export const apiCreateProduct = async (data: any) => {
+  const response = await fetch('/products/comprehensive', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      // Add auth token if needed
+      'Authorization': `Bearer ${localStorage.getItem('token')}`
+    },
+    body: JSON.stringify(data)
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to create product');
+  }
+  
+  return response.json();
+};
 
 export const apiCreateProductComprehensive = (data: any) =>
   postJson('/products/comprehensive', data);
@@ -335,7 +339,7 @@ export const apiGetProductVariants = (productId: number) =>
 
 // Helper: Verify critical product data (price, stock) before cart operations
 export const apiVerifyProductData = async (productId: number, variantId?: number) => {
-  console.log(`🔍 Verifying product data for product ${productId}`);
+  console.log(`🔍 Verifying product data for product ${productId}, variantId: ${variantId}`);
   
   // Always fetch fresh data from backend for critical operations
   const response = await getJsonPublic(`/products/${productId}`);
@@ -345,31 +349,56 @@ export const apiVerifyProductData = async (productId: number, variantId?: number
     throw new Error('Product not found');
   }
   
+  console.log('📦 Product data:', product);
+  console.log('📦 Product variants:', product.variants);
+  
   // If variant specified, find the variant's data
-  if (variantId && product.variants) {
-    const variant = product.variants.find((v: any) => v.id === variantId);
+  if (variantId) {
+    if (!product.variants || product.variants.length === 0) {
+      console.warn('⚠️ Variant ID provided but product has no variants, using product-level data');
+      const productStock = product.stock_quantity ?? product.stock ?? 0;
+      return {
+        available: productStock > 0,
+        price: product.price,
+        stock: productStock,
+        product: product
+      };
+    }
+    
+    const variant = product.variants.find((v: any) => v.variant_id === variantId || v.id === variantId);
     if (!variant) {
+      console.error('❌ Variant not found. Available variants:', product.variants);
       throw new Error('Variant not found');
     }
     
+    console.log('✅ Found variant:', variant);
+    
+    // Handle both 'stock' and 'stock_quantity' property names
+    const stockQty = variant.stock ?? variant.stock_quantity ?? 0;
+    
+    console.log(`📊 Stock check: stock=${variant.stock}, stock_quantity=${variant.stock_quantity}, final=${stockQty}`);
+    
     return {
-      available: variant.stock_quantity > 0,
+      available: stockQty > 0,
       price: variant.price,
-      stock: variant.stock_quantity,
+      stock: stockQty,
       product: product,
       variant: variant
     };
   }
   
-  // Default product data
+  // Default product data (no variant specified)
+  const productStockQty = product.stock_quantity ?? product.stock ?? 0;
+  
+  console.log(`📊 Product stock check: stock=${product.stock}, stock_quantity=${product.stock_quantity}, final=${productStockQty}`);
+  
   return {
-    available: product.stock_quantity > 0,
+    available: productStockQty > 0,
     price: product.price,
-    stock: product.stock_quantity,
+    stock: productStockQty,
     product: product
   };
 };
-
 // ===============================
 // ADDRESSES API
 // ===============================
