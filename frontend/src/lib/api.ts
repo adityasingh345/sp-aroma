@@ -267,8 +267,9 @@ export const apiGetProducts = async () => {
   return response;
 };
 
+
 export const apiGetProduct = async (productId: string | number) => {
-  const response = await fetch(`/products/${productId}`);
+  const response = await fetch(`${API_BASE}/products/${productId}`);
   if (!response.ok) throw new Error('Product not found');
   return response.json();
 };
