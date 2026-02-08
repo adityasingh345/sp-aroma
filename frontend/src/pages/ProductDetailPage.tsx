@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiGetProduct, apiGetProducts } from '../lib/api';
-import { Plus, Minus, ChevronRight, Check, ShoppingBag, Heart, Share2, Package, Shield, Sparkles } from 'lucide-react';
+import { Plus, ChevronRight, Check, ShoppingBag, Heart, Share2, Package, Shield, Sparkles } from 'lucide-react';
 import { cn } from '../lib/utils';
 import ProductCard from '../components/ProductCard';
 import { useCart } from '../contexts/CartContext';
@@ -162,7 +162,7 @@ const ProductDetailPage = () => {
               shortDescription: it.description || '',
               category: it.category,
             }));
-          
+
           if (mounted) {
             setRelatedProducts(mappedAll);
           }
@@ -233,7 +233,7 @@ const ProductDetailPage = () => {
         longDescription: product.longDescription || product.shortDescription,
         ingredients: product.ingredients || '',
         howToUse: product.howToUse || '',
-        
+
         // Variant information
         variantId: selectedVariant.variant_id,
         selectedOption: getVariantDisplayName(selectedVariant),

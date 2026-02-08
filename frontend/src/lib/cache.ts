@@ -2,7 +2,7 @@
 // Includes data integrity checks and automatic cache invalidation
 
 const DB_NAME = 'sp_aroma_cache';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const PRODUCTS_STORE = 'products';
 const CART_STORE = 'cart';
 const ORDERS_STORE = 'orders';

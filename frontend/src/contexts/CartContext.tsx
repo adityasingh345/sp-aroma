@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-import { Product } from '../types';
+import { Product} from '../types';
 import { useAuth } from './AuthContext';
 import {
   apiGetCart,
@@ -42,7 +42,6 @@ export const useCart = () => {
   return context;
 };
 
-// Helper function to check if two items are the same (considering variant)
 const areItemsSame = (item1: CartItem, item2: CartItem): boolean => {
   // First check product ID
   if (item1.id !== item2.id) return false;
@@ -89,7 +88,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
 
       // Map backend cart items to frontend CartItem format
       const serverItems: CartItem[] = serverItemsRaw.map((it: any) => ({
-        id: it.product_id ?? it.id ?? 0,
+        id: it.product_id ?? it.variant_id ?? it.id ?? 0,
         cartItemId: it.item_id ?? it.id,
         variantId: it.variant_id,
         name: it.product_name ?? it.name ?? '',
@@ -98,14 +97,12 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         originalPrice: undefined,
         imageUrl: (it.image_url ?? it.imageUrl ?? it.media?.[0]?.src) || '',
         categories: it.categories ?? [],
-        category: it.category,
-        product_type: it.product_type,
         shortDescription: it.description ?? it.shortDescription ?? '',
         longDescription: it.longDescription ?? '',
         ingredients: it.ingredients ?? '',
         howToUse: it.howToUse ?? '',
         quantity: it.quantity ?? it.qty ?? 1,
-        // Variant information
+        //variant 
         variantName: it.variant_name || it.variantName || '',
         variantSize: it.variant_size || it.variantSize || '',
         selectedOption: it.selected_option || it.selectedOption || '',
@@ -120,19 +117,20 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
-    let mounted = true;
     const syncFromServer = async () => {
       if (!user) return;
       await refreshCart();
     };
     syncFromServer();
-    return () => { mounted = false; };
+    return () => { };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
 
   const addToCart = async (product: Product, quantity: number, variantId?: number) => {
     // Extract variant information from product
     const extractedVariantId = variantId || (product as any).variantId;
-    
+
     // Create new cart item
     const newCartItem: CartItem = {
       ...product,
@@ -216,12 +214,12 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   const removeFromCart = async (productId: number, variantId?: number) => {
     if (user) {
       try {
-        // Find cart item ID for this product with specific variant
-        const cartItem = cartItems.find(item =>
-          item.id === productId &&
-          item.variantId === variantId
+        // Find cart item ID for this product
+        const cartItem = cartItems.find(item => 
+          item.id === productId && 
+          (variantId !== undefined ? item.variantId === variantId : !item.variantId)
         );
-
+        
         if (cartItem?.cartItemId) {
           await apiDeleteCartItem(cartItem.cartItemId);
         }
@@ -229,18 +227,17 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       } catch (err) {
         console.error('Failed to remove from cart on backend', err);
         // Fall back to local removal
-        setCartItems(prevItems =>
-          prevItems.filter(item =>
-            !(item.id === productId && item.variantId === variantId)
-          )
-        );
+        setCartItems(prevItems => prevItems.filter(item => 
+          !(item.id === productId && 
+            (variantId !== undefined ? item.variantId === variantId : !item.variantId))
+        ));
       }
     } else {
-      setCartItems(prevItems =>
-        prevItems.filter(item =>
-          !(item.id === productId && item.variantId === variantId)
-        )
-      );
+      // Fix: Correct filter logic for removing items
+      setCartItems(prevItems => prevItems.filter(item => 
+        !(item.id === productId && 
+          (variantId !== undefined ? item.variantId === variantId : !item.variantId))
+      ));
     }
   };
 
@@ -283,20 +280,21 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+
   const clearCart = () => {
     setCartItems([]);
   };
 
   const cartCount = cartItems.reduce((count, item) => count + item.quantity, 0);
 
-  const cartTotal = cartItems.reduce((total, item) => {
+ const cartTotal = cartItems.reduce((total, item) => {
     // Use variantPrice if available, otherwise use regular price
     const priceValue = item.variantPrice || item.price;
     const price = parseFloat(priceValue.toString().replace('₹', '').replace(',', ''));
     return total + price * item.quantity;
   }, 0);
 
-  const value: CartContextType = {
+  const value = {
     cartItems,
     addToCart,
     removeFromCart,

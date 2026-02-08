@@ -11,6 +11,9 @@ export { ProductCache, UserCache, CartCache, OrdersCache, AddressesCache, invali
 // In prod: absolute backend URL
 export const API_BASE = import.meta.env.VITE_API_BASE ?? '';
 
+console.log('API_BASE =', import.meta.env.VITE_API_BASE);
+
+
 const TOKEN_KEY = 'spAromaToken';
 
 function resolveUrl(path: string) {
@@ -20,7 +23,9 @@ function resolveUrl(path: string) {
   if (!API_BASE) return p;
 
   // Prod → absolute backend
-  return `${API_BASE.replace(/\/$/, '')}${p}`;
+  const url = `${API_BASE.replace(/\/$/, '')}${p}`;
+  console.log('🔗 Resolving URL:', { path, API_BASE, final: url }); // ADD THIS
+  return url;
 }
 
 // ===============================
@@ -250,21 +255,21 @@ export const apiDeleteAccount = () =>
 export const apiGetProducts = async () => {
   // Try to get from cache first
   const cached = await ProductCache.get();
-  if (cached && !ProductCache.isExpired()) {
-    
-    return cached
+  if (cached && !ProductCache.isExpired()) { 
+    return { products: cached };  // ✅ Return in expected format
   }
 
-  // Cache miss or expired - fetch from API
-  console.log('🌐 Fetching products from API');
-  const response = await getJsonPublic('/products/');
+  // DIRECT FETCH - BYPASS resolveUrl `${API_BASE}/products/`
+  const response = await fetch(`${API_BASE}/products/`);
+  const data = await response.json();
   
-  // Store in cache for future use
-  if (response?.products) {
-    await ProductCache.set(response.products);
-  }
-  
-  return response.products
+  const normalized = data.products.map((p: any) => ({
+    ...p,
+    id: p.product_id,
+  }));
+
+  await ProductCache.set(normalized);
+  return { products: normalized };  // ✅ Return in expected format
 };
 
 
