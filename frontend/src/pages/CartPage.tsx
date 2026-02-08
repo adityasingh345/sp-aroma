@@ -57,6 +57,9 @@ const CartPage = () => {
                     <div className="flex-1 text-center sm:text-left">
                       <h3 className="text-xl font-light tracking-widest">{item.name}</h3>
                       <p className="text-sm text-muted-foreground">{item.type}</p>
+                      {item.variantSize && (
+                        <p className="text-sm text-gray-600 mt-1">Size: {item.variantSize}</p>
+                      )}
                       <p className="font-sans text-lg text-heading mt-1">{item.price}</p>
                     </div>
                     <div className="flex items-center gap-4">
