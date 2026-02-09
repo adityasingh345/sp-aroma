@@ -33,7 +33,7 @@ const OrderDetailsModal = ({ isOpen, onClose, orderId, isAdmin = false }: OrderD
     setLoading(true);
     setError('');
     try {
-      const res = isAdmin 
+      const res = isAdmin
         ? await apiGetAdminOrder(Number(orderId))
         : await apiGetOrder(Number(orderId));
       setOrder(res?.order || res);
@@ -55,13 +55,22 @@ const OrderDetailsModal = ({ isOpen, onClose, orderId, isAdmin = false }: OrderD
   const orderItems = orderInfo?.items || orderInfo?.order_items || [];
   const shippingAddress = orderInfo?.shipping_address || orderInfo?.address;
   const paymentInfo = orderInfo?.payment;
-  const paymentMethod = paymentInfo?.razorpay_payment_id 
+  const paymentMethod = paymentInfo?.razorpay_payment_id
     ? `Razorpay (${paymentInfo.razorpay_payment_id.substring(0, 20)}...)`
-    : paymentInfo?.status === 'completed' 
-    ? 'Completed' 
-    : '—';
+    : paymentInfo?.status === 'completed'
+      ? 'Completed'
+      : '—';
   const userInfo = orderInfo?.user;
   const currency = orderInfo?.currency || '₹';
+
+  const formattedTime = new Date(orderDate + 'Z').toLocaleString(
+    'en-IN',
+    {
+      timeZone: 'Asia/Kolkata',
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }
+  );
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -87,7 +96,7 @@ const OrderDetailsModal = ({ isOpen, onClose, orderId, isAdmin = false }: OrderD
                 <div>
                   <h3 className="text-xl font-bold text-dark-text">Order #{orderIdDisplay}</h3>
                   <p className="text-sm text-foreground mt-1">
-                    Placed on: {new Date(orderDate).toLocaleString()}
+                    Placed on: {formattedTime}
                   </p>
                   {userInfo && (
                     <div className="mt-3 text-sm">
@@ -126,6 +135,28 @@ const OrderDetailsModal = ({ isOpen, onClose, orderId, isAdmin = false }: OrderD
                     const itemImage =
                       item.imageUrl || item.image_url || item.media?.[0]?.src || '/placeholder.png';
 
+                    let variantSize = null;
+                    // Check if product object exists and has variants array
+                    if (item.product && Array.isArray(item.product.variants) && item.variant_id) {
+                      const matchingVariant = item.product.variants.find((v: any) => v.id === item.variant_id);
+                      if (matchingVariant) {
+                        variantSize = matchingVariant.size || matchingVariant.name;
+                      }
+                    }
+
+                    if (!variantSize) {
+                      variantSize = item.variant?.size || 
+                                   item.size || 
+                                   item.variant_size || 
+                                   item.variant_name;
+                    }
+                    
+                    console.log(`Item ${index}:`, {
+                      variant_id: item.variant_id,
+                      product_variants: item.product?.variants,
+                      variantSize: variantSize
+                    });
+
                     return (
                       <div key={index} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
                         <img
@@ -138,6 +169,11 @@ const OrderDetailsModal = ({ isOpen, onClose, orderId, isAdmin = false }: OrderD
                         />
                         <div className="flex-1">
                           <h5 className="font-medium text-dark-text">{itemName}</h5>
+                          {variantSize && (
+                            <p className="text-sm text-gray-700 mt-1 font-medium">
+                              {variantSize}
+                            </p>
+                          )}
                           <p className="text-sm text-foreground mt-1">Quantity: {itemQty}</p>
                         </div>
                         <div className="text-right">

@@ -11,9 +11,6 @@ export { ProductCache, UserCache, CartCache, OrdersCache, AddressesCache, invali
 // In prod: absolute backend URL
 export const API_BASE = import.meta.env.VITE_API_BASE ?? '';
 
-console.log('API_BASE =', import.meta.env.VITE_API_BASE);
-
-
 const TOKEN_KEY = 'spAromaToken';
 
 function resolveUrl(path: string) {
@@ -23,9 +20,7 @@ function resolveUrl(path: string) {
   if (!API_BASE) return p;
 
   // Prod → absolute backend
-  const url = `${API_BASE.replace(/\/$/, '')}${p}`;
-  console.log('🔗 Resolving URL:', { path, API_BASE, final: url }); // ADD THIS
-  return url;
+  return `${API_BASE.replace(/\/$/, '')}${p}`;
 }
 
 // ===============================
@@ -255,48 +250,43 @@ export const apiDeleteAccount = () =>
 export const apiGetProducts = async () => {
   // Try to get from cache first
   const cached = await ProductCache.get();
-  if (cached && !ProductCache.isExpired()) { 
-    return { products: cached };  // ✅ Return in expected format
+  if (cached && !ProductCache.isExpired()) {
+    console.log('📦 Using cached products');
+    return { products: cached };
   }
 
-  // DIRECT FETCH - BYPASS resolveUrl `${API_BASE}/products/`
-  const response = await fetch(`${API_BASE}/products/`);
-  const data = await response.json();
+  // Cache miss or expired - fetch from API
+  console.log('🌐 Fetching products from API');
+  const response = await getJsonPublic('/products/');
   
-  const normalized = data.products.map((p: any) => ({
-    ...p,
-    id: p.product_id,
-  }));
-
-  await ProductCache.set(normalized);
-  return { products: normalized };  // ✅ Return in expected format
-};
-
-
-export const apiGetProduct = async (productId: string | number) => {
-  const response = await fetch(`${API_BASE}/products/${productId}`);
-  if (!response.ok) throw new Error('Product not found');
-  return response.json();
-};
-
-export const apiCreateProduct = async (data: any) => {
-  const response = await fetch('/products/comprehensive', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      // Add auth token if needed
-      'Authorization': `Bearer ${localStorage.getItem('token')}`
-    },
-    body: JSON.stringify(data)
-  });
-  
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || 'Failed to create product');
+  // Store in cache for future use
+  if (response?.products) {
+    await ProductCache.set(response.products);
   }
   
-  return response.json();
+  return response;
 };
+
+export const apiGetProduct = async (productId: number | string) => {
+  // Try to get from cache first
+  const cached = await ProductCache.getById(Number(productId));
+  if (cached) {
+    console.log(`📦 Using cached product ${productId}`);
+    return { product: cached };
+  }
+
+  // Cache miss - fetch from API
+  console.log(`🌐 Fetching product ${productId} from API`);
+  const response = await getJsonPublic(`/products/${productId}`);
+  
+  // Note: Individual product fetches don't update cache
+  // Cache is only updated by apiGetProducts() to maintain consistency
+  
+  return response;
+};
+
+export const apiCreateProduct = (data: any) =>
+  postJson('/products/', data);
 
 export const apiCreateProductComprehensive = (data: any) =>
   postJson('/products/comprehensive', data);
@@ -405,6 +395,7 @@ export const apiVerifyProductData = async (productId: number, variantId?: number
     product: product
   };
 };
+
 // ===============================
 // ADDRESSES API
 // ===============================
@@ -618,6 +609,13 @@ export const apiSendBulkEmail = (data: {
   recipient_email?: string;
 }) => postJson('/admin/emails/send-bulk', data);
 
+export const apiGetAdminProduct = async (productId: number | string) => {
+  console.log(`🌐 Admin fetching product ${productId} (no cache)`);
+  return getJson(`/products/${productId}`);
+};
+
+export const apiGetAdminProducts = () =>
+  getJson('/products/');
 
 // ===============================
 // PAYMENTS API

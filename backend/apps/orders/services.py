@@ -222,10 +222,40 @@ class OrderService:
             product = session.query(Product).filter(Product.id == item.product_id).first()
             variant = session.query(ProductVariant).filter(ProductVariant.id == item.variant_id).first() if item.variant_id else None
             
+            variant_data = None
+            if variant:
+                from apps.products.models import ProductOptionItem
+                
+                # Get the variant name from option1 (size option)
+                variant_name = None
+                if variant.option1:
+                    option_item = session.query(ProductOptionItem).filter(ProductOptionItem.id == variant.option1).first()
+                    if option_item:
+                        variant_name = option_item.item_name
+                
+                # If no option1, try option2 or option3
+                if not variant_name and variant.option2:
+                    option_item = session.query(ProductOptionItem).filter(ProductOptionItem.id == variant.option2).first()
+                    if option_item:
+                        variant_name = option_item.item_name
+                
+                if not variant_name and variant.option3:
+                    option_item = session.query(ProductOptionItem).filter(ProductOptionItem.id == variant.option3).first()
+                    if option_item:
+                        variant_name = option_item.item_name
+                
+                variant_data = {
+                    "id": variant.id,
+                    "size": variant_name or "Unknown",
+                    "price": float(variant.price),
+                    "stock": variant.stock,
+                }
+            
             items_with_details.append({
                 "product_id": item.product_id,
                 "product_name": product.product_name if product else "Unknown Product",
                 "variant_id": item.variant_id,
+                "variant": variant_data,
                 "quantity": item.quantity,
                 "price": float(item.price),
                 "subtotal": float(item.price * item.quantity),

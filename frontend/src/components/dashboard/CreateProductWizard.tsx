@@ -49,7 +49,7 @@ const CreateProductWizard = ({ onClose, onSuccess }: CreateProductWizardProps) =
     description: '',
     ingredients: '',
     how_to_use: '',
-    status: 'draft',
+    status: 'draft', 
     options: [],
     variants: [],
     product_images: [],
@@ -79,6 +79,7 @@ const CreateProductWizard = ({ onClose, onSuccess }: CreateProductWizardProps) =
       setCurrentStep(currentStep - 1);
     }
   };
+
 
   const handleAddOption = () => {
     if (!newOptionName || !newOptionItems) return;
@@ -222,8 +223,6 @@ const CreateProductWizard = ({ onClose, onSuccess }: CreateProductWizardProps) =
     setLoading(true);
     try {
       // All images are already uploaded to Cloudinary, just submit the data
-      console.log("FINAL PAYLOAD SENT TO BACKEND:", formData);
-
       await apiCreateProductComprehensive(formData);
       showSuccess('Product created successfully!');
       onSuccess();
@@ -253,6 +252,7 @@ const CreateProductWizard = ({ onClose, onSuccess }: CreateProductWizardProps) =
                 required
               />
             </div>
+
             <div>
               <label className="block text-sm font-medium mb-2">Description</label>
               <textarea

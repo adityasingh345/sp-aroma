@@ -37,7 +37,7 @@ const UserDashboardPage = () => {
   const [editForm, setEditForm] = useState({ first_name: '', last_name: '' });
   const [isSaving, setIsSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  
+
   // Address state
   const [addresses, setAddresses] = useState<any[]>([]);
   const [isAddingAddress, setIsAddingAddress] = useState(false);
@@ -54,18 +54,19 @@ const UserDashboardPage = () => {
     is_default: false,
   });
 
+
   useEffect(() => {
     if (!user) {
       navigate('/auth');
       return;
     }
-    
+
     // Check if there's a tab specified in navigation state
     const targetTab = location.state?.tab;
     if (targetTab && ['profile', 'orders', 'addresses'].includes(targetTab)) {
       setActiveTab(targetTab);
     }
-    
+
     loadData();
   }, [user]);
 
@@ -139,8 +140,8 @@ const UserDashboardPage = () => {
   const handleAddAddress = () => {
     setIsAddingAddress(true);
     setAddressForm({
-      full_name: profile?.user?.first_name && profile?.user?.last_name 
-        ? `${profile.user.first_name} ${profile.user.last_name}` 
+      full_name: profile?.user?.first_name && profile?.user?.last_name
+        ? `${profile.user.first_name} ${profile.user.last_name}`
         : '',
       phone: '',
       line1: '',
@@ -205,13 +206,13 @@ const UserDashboardPage = () => {
   };
 
   const handleDeleteAddress = async (addressId: number) => {
-    const confirmed = await confirm({ 
+    const confirmed = await confirm({
       message: 'Are you sure you want to delete this address?',
       confirmText: 'Delete',
       variant: 'danger'
     });
     if (!confirmed) return;
-    
+
     try {
       await apiDeleteAddress(addressId);
       const addressesRes = await apiGetAddresses();
@@ -240,6 +241,7 @@ const UserDashboardPage = () => {
     { id: 'orders' as const, label: 'My Orders', icon: Package },
     { id: 'addresses' as const, label: 'Addresses', icon: MapPin },
   ];
+
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -463,6 +465,14 @@ const UserDashboardPage = () => {
                     const orderDate = order.created_at || order.date || '—';
                     const orderTotal = Number(order.total_amount ?? order.total ?? order.amount ?? 0);
                     const orderStatus = (order.status || 'PLACED').toUpperCase();
+                    const formattedTime = new Date(orderDate + 'Z').toLocaleString(
+                      'en-IN',
+                      {
+                        timeZone: 'Asia/Kolkata',
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                      }
+                    );
 
                     return (
                       <div key={orderId} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
@@ -475,7 +485,7 @@ const UserDashboardPage = () => {
                               </span>
                             </div>
                             <p className="text-sm text-gray-600">
-                              Placed on {new Date(orderDate).toLocaleDateString()} at {new Date(orderDate).toLocaleTimeString()}
+                              Placed on {formattedTime}
                             </p>
                             <p className="text-lg font-medium text-heading">₹{orderTotal.toFixed(2)}</p>
                           </div>
@@ -659,9 +669,8 @@ const UserDashboardPage = () => {
                       {addresses.map((address) => (
                         <div
                           key={address.id}
-                          className={`border rounded-lg p-4 ${
-                            address.is_default ? 'border-heading bg-heading/5' : 'border-gray-200'
-                          }`}
+                          className={`border rounded-lg p-4 ${address.is_default ? 'border-heading bg-heading/5' : 'border-gray-200'
+                            }`}
                         >
                           <div className="flex justify-between items-start">
                             <div className="flex-1">

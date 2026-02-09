@@ -57,15 +57,13 @@ const CartPage = () => {
                     <div className="flex-1 text-center sm:text-left">
                       <h3 className="text-xl font-light tracking-widest">{item.name}</h3>
                       <p className="text-sm text-muted-foreground">{item.type}</p>
-                      {item.variantSize && (
-                        <p className="text-sm text-gray-600 mt-1">Size: {item.variantSize}</p>
-                      )}
+                      <p className="text-sm text-muted-foreground">{item.variantSize}</p>
                       <p className="font-sans text-lg text-heading mt-1">{item.price}</p>
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="flex items-center border border-gray-200 rounded-md">
                         <button 
-                          onClick={() => updateItemQuantity(item.id, item.quantity - 1, item.variantId)}
+                          onClick={() => updateItemQuantity(item.id, item.quantity - 1 , item.variantId)}
                           className="w-10 h-10 flex items-center justify-center text-gray-500 hover:bg-gray-100 transition-colors"
                           aria-label="Decrease quantity"
                         >
