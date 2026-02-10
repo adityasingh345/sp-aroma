@@ -182,8 +182,6 @@ class CartService:
             # Clear cart
             session.query(CartItem).filter_by(cart_id=cart.id).delete()
 
-            # 🔥 SINGLE COMMIT POINT
-            session.commit()
 
             return {
                 "order_id": order.id,

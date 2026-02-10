@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from apps.orders.models import Order, OrderItem
 from apps.payments.models import Payment
+from apps.products.models import Product, ProductVariant
 from config.database import SessionLocal
 
 # Order Status Constants
@@ -104,6 +105,35 @@ class OrderService:
     ):
         if not cart.items:
             raise HTTPException(status_code=400, detail="Cart is empty")
+        
+        for item in cart.items:
+            if item.variant_id:
+                # Check variant stock
+                variant = session.query(ProductVariant).filter(
+                    ProductVariant.id == item.variant_id
+                ).first()
+                
+                if not variant:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail=f"Variant {item.variant_id} not found"
+                    )
+                
+                if variant.stock < item.quantity:
+                    product = session.query(Product).filter(Product.id == item.product_id).first()
+                    product_name = product.product_name if product else "Unknown Product"
+                    raise HTTPException(
+                        status_code=400, 
+                        detail=f"Insufficient stock for {product_name}. Available: {variant.stock}, Requested: {item.quantity}"
+                    )
+            else:
+                # Check product stock (if product has stock field)
+                product = session.query(Product).filter(Product.id == item.product_id).first()
+                if not product:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail=f"Product {item.product_id} not found"
+                    )
 
         total_amount = Decimal("0.00")
 
@@ -137,6 +167,31 @@ class OrderService:
                     price=price,
                 )
             )
+            
+            if item.variant_id:
+                # Reduce variant stock
+                variant = session.query(ProductVariant).filter(
+                    ProductVariant.id == item.variant_id
+                ).first()
+                
+                if variant:
+                    variant.stock -= item.quantity
+                    
+                    # Prevent negative stock
+                    if variant.stock < 0:
+                        variant.stock = 0
+                    
+                    session.add(variant)
+                    print(f"✅ Reduced variant {variant.id} stock by {item.quantity}. New stock: {variant.stock}")
+            else:
+                # If your Product model has a stock field, reduce it here
+                # product = session.query(Product).filter(Product.id == item.product_id).first()
+                # if product and hasattr(product, 'stock'):
+                #     product.stock -= item.quantity
+                #     if product.stock < 0:
+                #         product.stock = 0
+                #     session.add(product)
+                pass
 
         order.total_amount = total_amount
 

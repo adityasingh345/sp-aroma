@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { apiGetProduct, apiGetProducts } from '../lib/api';
+import { apiGetProduct, apiGetProducts, invalidateCache } from '../lib/api';
 import { Plus, ChevronRight, Check, ShoppingBag, Heart, Share2, Package, Shield, Sparkles } from 'lucide-react';
 import { cn } from '../lib/utils';
 import ProductCard from '../components/ProductCard';
@@ -43,6 +43,9 @@ const ProductDetailPage = () => {
     let mounted = true;
     const load = async () => {
       if (!productId) return;
+
+      await invalidateCache('products');
+
       setLoading(true);
       setSelectedImageIndex(0);
       try {
